@@ -1,6 +1,12 @@
 # Byte-compiled / optimized / DLL files
 *.log
 
+# Instance Folder - used for run-time files
+instance/*.cfg
+instance/*.db
+instance/*.log
+instance/*.log*
+
 __pycache__/
 *.py[cod]
 *$py.class
