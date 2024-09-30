@@ -95,7 +95,7 @@ h2 {
 
 /* Message Styling
  *****************/
-.close-btn {
+ .close-btn {
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -164,7 +164,7 @@ h2 {
   margin-bottom: 1em;
 }
 
-.errorpage-text {
+.errorpage-section {
   text-align: center;
   font-size: 1.15rem;
   margin-bottom: 1em;

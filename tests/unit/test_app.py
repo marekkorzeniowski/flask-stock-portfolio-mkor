@@ -4,7 +4,7 @@ This file (test_app.py) contains the unit tests for the app.py file.
 import pytest
 from pydantic import ValidationError
 
-from app import StockModel
+from project.stocks.routes import StockModel
 
 
 def test_validate_stock_data_nominal():
