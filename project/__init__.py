@@ -3,6 +3,30 @@ from logging.handlers import RotatingFileHandler
 import logging
 from flask.logging import default_handler
 import os
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import MetaData
+# from flask_migrate import Migrate
+
+
+# -------------
+# Configuration
+# -------------
+
+# Create a naming convention for the database tables
+convention = {
+    "ix": 'ix_%(column_0_label)s',
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s"
+}
+metadata = MetaData(naming_convention=convention)
+
+# Create the instances of the Flask extensions in the global scope,
+# but without any arguments passed in. These instances are not
+# attached to the Flask application at this point.
+database = SQLAlchemy(metadata=metadata)
+# db_migration = Migrate()
 
 
 # ----------------------------
@@ -17,8 +41,10 @@ def create_app():
     config_type = os.getenv('CONFIG_TYPE', default='config.DevelopmentConfig')
     app.config.from_object(config_type)
 
+    initialize_extensions(app)
     register_blueprints(app)
     configure_logging(app)
+    register_app_callbacks(app)
     register_error_pages(app)
     return app
 
@@ -26,6 +52,13 @@ def create_app():
 # ----------------
 # Helper Functions
 # ----------------
+
+def initialize_extensions(app):
+    # Since the application instance is now created, pass it to each Flask
+    # extension instance to bind it to the Flask application instance (app)
+    database.init_app(app)
+    # db_migration.init_app(app, database)
+
 
 def register_blueprints(app):
     # Import the blueprints
@@ -40,8 +73,7 @@ def register_blueprints(app):
 
 def configure_logging(app):
     # Logging Configuration
-    # file_handler = RotatingFileHandler('instance/flask-stock-portfolio.log',
-    file_handler = RotatingFileHandler('flask-stock-portfolio.log',
+    file_handler = RotatingFileHandler('instance/flask-stock-portfolio.log',
                                        maxBytes=16384,
                                        backupCount=20)
     file_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s [in %(filename)s:%(lineno)d]')
@@ -53,6 +85,26 @@ def configure_logging(app):
     app.logger.removeHandler(default_handler)
 
     app.logger.info('Starting the Flask Stock Portfolio App...')
+
+
+def register_app_callbacks(app):
+    @app.before_request
+    def app_before_request():
+        app.logger.info('Calling before_request() for the Flask application...')
+
+    @app.after_request
+    def app_after_request(response):
+        app.logger.info('Calling after_request() for the Flask application...')
+        # print(response.headers)
+        return response
+
+    @app.teardown_request
+    def app_teardown_request(error=None):
+        app.logger.info('Calling teardown_request() for the Flask application...')
+
+    @app.teardown_appcontext
+    def app_teardown_appcontext(error=None):
+        app.logger.info('Calling teardown_appcontext() for the Flask application...')
 
 
 def register_error_pages(app):

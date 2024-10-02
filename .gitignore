@@ -69,8 +69,16 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
-# Flask stuff:
-instance/
+# Instance Folder - used for run-time files
+instance/*.cfg
+instance/*.db
+instance/*.log
+instance/*.log*
+
+# Log Files
+instance/logs/
+*.log
+
 .webassets-cache
 
 # Scrapy stuff:

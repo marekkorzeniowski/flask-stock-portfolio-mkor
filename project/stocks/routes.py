@@ -2,6 +2,9 @@ from . import stocks_blueprint
 from flask import current_app, render_template, request, session, flash, redirect, url_for
 from pydantic import BaseModel, field_validator, ValidationError
 
+from .. import database
+from ..models import Stock
+
 
 class StockModel(BaseModel):
     stock_symbol: str
@@ -37,6 +40,13 @@ def add_stock():
             session['number_of_shares'] = stock_data.number_of_shares
             session['purchase_price'] = stock_data.purchase_price
 
+            # Save the form data to the database
+            new_stock = Stock(stock_data.stock_symbol,
+                              stock_data.number_of_shares,
+                              stock_data.purchase_price)
+            database.session.add(new_stock)
+            database.session.commit()
+
             flash(f"Added new stock ({stock_data.stock_symbol})!", 'success')
             current_app.logger.info(f"Added new stock ({request.form['stock_symbol']})!")
 
@@ -49,4 +59,6 @@ def add_stock():
 
 @stocks_blueprint.route('/stocks/')
 def list_stocks():
-    return render_template('stocks/stocks.html')
+    query = database.select(Stock).order_by(Stock.id)
+    stocks = database.session.execute(query).scalars().all()
+    return render_template('stocks/stocks.html', stocks=stocks)
