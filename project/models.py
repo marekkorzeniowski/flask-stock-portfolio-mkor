@@ -1,6 +1,7 @@
 from project import database
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import mapped_column
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
 class Stock(database.Model):
@@ -33,3 +34,34 @@ class Stock(database.Model):
 
     def __repr__(self):
         return f'{self.stock_symbol} - {self.number_of_shares} shares purchased at ${self.purchase_price / 100}'
+
+
+class User(database.Model):
+    """
+    Class that represents a user of the application
+
+    The following attributes of a user are stored in this table:
+        * email - email address of the user
+        * hashed password - hashed password (using werkzeug.security)
+
+    REMEMBER: Never store the plaintext password in a database!
+    """
+    __tablename__ = 'users'
+
+    id = mapped_column(Integer(), primary_key=True)
+    email = mapped_column(String(), unique=True)
+    password_hashed = mapped_column(String(128))
+
+    def __init__(self, email: str, password_plaintext: str):
+        self.email = email
+        self.password_hashed = self._generate_password_hash(password_plaintext)
+
+    def is_password_correct(self, password_plaintext: str):
+        return check_password_hash(self.password_hashed, password_plaintext)
+
+    @staticmethod
+    def _generate_password_hash(password_plaintext):
+        return generate_password_hash(password_plaintext)
+
+    def __repr__(self):
+        return f'<User: {self.email}>'
