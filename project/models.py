@@ -1,3 +1,5 @@
+import flask_login
+
 from project import database
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import mapped_column
@@ -36,7 +38,7 @@ class Stock(database.Model):
         return f'{self.stock_symbol} - {self.number_of_shares} shares purchased at ${self.purchase_price / 100}'
 
 
-class User(database.Model):
+class User(flask_login.UserMixin, database.Model):
     """
     Class that represents a user of the application
 

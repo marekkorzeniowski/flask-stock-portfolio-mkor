@@ -37,3 +37,27 @@ def test_client():
 def new_user():
     user = User('patrick@email.com', 'FlaskIsAwesome123')
     return user
+
+
+@pytest.fixture(scope='module')
+def register_default_user(test_client):
+    # Register the default user
+    test_client.post('/users/register',
+                     data={'email': 'patrick@gmail.com',
+                           'password': 'FlaskIsAwesome123'},
+                     follow_redirects=True)
+    return
+
+
+@pytest.fixture(scope='function')
+def log_in_default_user(test_client, register_default_user):
+    # Log in the default user
+    test_client.post('/users/login',
+                     data={'email': 'patrick@gmail.com',
+                           'password': 'FlaskIsAwesome123'},
+                     follow_redirects=True)
+
+    yield
+
+    # Log out the default user
+    test_client.get('/users/logout', follow_redirects=True)
