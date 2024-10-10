@@ -162,3 +162,102 @@ def test_invalid_logout_not_logged_in(test_client):
     assert b'Flask Stock Portfolio App' in response.data
     assert b'Login' in response.data
     assert b'Please log in to access this page.' in response.data
+
+
+def test_user_profile_logged_in(test_client, log_in_default_user):
+    """
+    GIVEN a Flask application configured for testing and the default user logged in
+    WHEN the '/users/profile' page is requested (GET)
+    THEN check that the profile for the current user is displayed
+    """
+    response = test_client.get('/users/profile')
+    assert response.status_code == 200
+    assert b'Flask Stock Portfolio App' in response.data
+    assert b'User Profile' in response.data
+    assert b'Email: patrick@gmail.com' in response.data
+
+
+def test_user_profile_not_logged_in(test_client):
+    """
+    GIVEN a Flask application configured for testing
+    WHEN the '/users/profile' page is requested (GET) when the user is NOT logged in
+    THEN check that the user is redirected to the login page
+    """
+    response = test_client.get('/users/profile', follow_redirects=True)
+    assert response.status_code == 200
+    assert b'Flask Stock Portfolio App' in response.data
+    assert b'User Profile!' not in response.data
+    assert b'Email: patrick@gmail.com' not in response.data
+    assert b'Please log in to access this page.' in response.data
+
+
+def test_navigation_bar_logged_in(test_client, log_in_default_user):
+    """
+    GIVEN a Flask application configured for testing
+    WHEN the '/' page is requested (GET) when the user is logged in
+    THEN check that the 'List Stocks', 'Add Stock', 'Profile' and 'Logout' links are present
+    """
+    response = test_client.get('/')
+    assert response.status_code == 200
+    assert b'Flask Stock Portfolio App' in response.data
+    assert b'Welcome to the' in response.data
+    assert b'Flask Stock Portfolio App!' in response.data
+    assert b'List Stocks' in response.data
+    assert b'Add Stock' in response.data
+    assert b'Profile' in response.data
+    assert b'Logout' in response.data
+    assert b'Register' not in response.data
+    assert b'Login' not in response.data
+
+
+def test_navigation_bar_not_logged_in(test_client):
+    """
+    GIVEN a Flask application configured for testing
+    WHEN the '/' page is requested (GET) when the user is not logged in
+    THEN check that the 'Register' and 'Login' links are present
+    """
+    response = test_client.get('/')
+    assert response.status_code == 200
+    assert b'Flask Stock Portfolio App' in response.data
+    assert b'Welcome to the' in response.data
+    assert b'Flask Stock Portfolio App!' in response.data
+    assert b'Register' in response.data
+    assert b'Login' in response.data
+    assert b'List Stocks' not in response.data
+    assert b'Add Stock' not in response.data
+    assert b'Profile' not in response.data
+    assert b'Logout' not in response.data
+
+
+def test_login_with_next_valid_path(test_client, register_default_user):
+    """
+    GIVEN a Flask application configured for testing
+    WHEN the 'users/login?next=%2Fusers%2Fprofile' page is posted to (POST) with a valid user login
+    THEN check that the user is redirected to the user profile page
+    """
+    response = test_client.post('users/login?next=%2Fusers%2Fprofile',
+                                data={'email': 'patrick@gmail.com',
+                                      'password': 'FlaskIsAwesome123'},
+                                follow_redirects=True)
+    assert response.status_code == 200
+    assert b'Flask Stock Portfolio App' in response.data
+    assert b'User Profile' in response.data
+    assert b'Email: patrick@gmail.com' in response.data
+
+    # Log out the user - Clean up!
+    test_client.get('/users/logout', follow_redirects=True)
+
+
+def test_login_with_next_invalid_path(test_client, register_default_user):
+    """
+    GIVEN a Flask application configured for testing
+    WHEN the 'users/login?next=http://www.badsite.com' page is posted to (POST) with a valid user login
+    THEN check that a 400 (Bad Request) error is returned
+    """
+    response = test_client.post('users/login?next=http://www.badsite.com',
+                                data={'email': 'patrick@gmail.com',
+                                      'password': 'FlaskIsAwesome123'},
+                                follow_redirects=True)
+    assert response.status_code == 400
+    assert b'User Profile' not in response.data
+    assert b'Email: patrick@gmail.com' not in response.data
