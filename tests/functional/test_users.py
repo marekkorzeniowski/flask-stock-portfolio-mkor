@@ -1,4 +1,4 @@
-
+from project import mail
 
 def test_get_registration_page(test_client):
     """
@@ -18,15 +18,20 @@ def test_valid_registration(test_client):
     """
     GIVEN a Flask application configured for testing
     WHEN the '/users/register' page is posted to (POST) with valid data
-    THEN check the response is valid and the user is registered
+    THEN check the response is valid, the user is registered, and an email was queued up to send
     """
-    response = test_client.post('/users/register',
-                                data={'email': 'patrick@email.com',
-                                      'password': 'FlaskIsAwesome123'},
-                                follow_redirects=True)
-    assert response.status_code == 200
-    assert b'Thanks for registering, patrick@email.com!' in response.data
-    assert b'Flask Stock Portfolio App' in response.data
+    with mail.record_messages() as outbox:
+        response = test_client.post('/users/register',
+                                    data={'email': 'patrick@email.com',
+                                          'password': 'FlaskIsAwesome123'},
+                                    follow_redirects=True)
+        assert response.status_code == 200
+        assert b'Thanks for registering, patrick@email.com!' in response.data
+        assert b'Flask Stock Portfolio App' in response.data
+        assert len(outbox) == 1
+        assert outbox[0].subject == 'Registration - Flask Stock Portfolio App'
+        assert outbox[0].sender == 'flaskstockportfolioapp@gmail.com'
+        assert outbox[0].recipients[0] == 'patrick@email.com'
 
 
 def test_invalid_registration(test_client):

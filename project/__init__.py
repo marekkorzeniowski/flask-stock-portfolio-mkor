@@ -8,7 +8,7 @@ from flask_wtf import CSRFProtect
 from sqlalchemy import MetaData
 from flask_migrate import Migrate
 from flask_login import LoginManager
-
+from flask_mail import Mail
 
 # -------------
 # Configuration
@@ -32,6 +32,7 @@ db_migration = Migrate()
 csrf_protection = CSRFProtect()
 login = LoginManager()
 login.login_view = "users.login"
+mail = Mail()
 
 
 # ----------------------------
@@ -66,6 +67,7 @@ def initialize_extensions(app):
     csrf_protection.init_app(app)
 
     login.init_app(app)
+    mail.init_app(app)
 
     # Flask-Login configuration
     from project.models import User
