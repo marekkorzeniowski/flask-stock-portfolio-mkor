@@ -5,12 +5,15 @@ from flask_login import current_user, login_user, login_required, logout_user
 
 from . import users_blueprint
 from flask import render_template, flash, abort, request, current_app, redirect, url_for, copy_current_request_context
-from .forms import RegistrationForm, LoginForm
+from .forms import RegistrationForm, LoginForm, EmailForm, PasswordForm
 from project.models import User
 from project import database
 from sqlalchemy.exc import IntegrityError
 from project import database, mail
 from flask_mail import Message
+from itsdangerous import URLSafeTimedSerializer
+from itsdangerous.exc import BadSignature
+from datetime import datetime
 
 
 @users_blueprint.route('/about')
@@ -29,6 +32,20 @@ def admin():
     abort(403)
 
 
+def generate_confirmation_email(user_email):
+    confirm_serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+
+    # By default, url_for creates relative URLs (i.e., '/users/profile'),
+    # we set _external to True to generate an absolute URL
+    confirm_url = url_for('users.confirm_email',
+                          token=confirm_serializer.dumps(user_email, salt='email-confirmation-salt'),
+                          _external=True)
+
+    return Message(subject='Flask Stock Portfolio App - Confirm Your Email Address',
+                   html=render_template('users/email_confirmation.html', confirm_url=confirm_url),
+                   recipients=[user_email])
+
+
 @users_blueprint.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegistrationForm()
@@ -39,7 +56,7 @@ def register():
                 new_user = User(form.email.data, form.password.data)
                 database.session.add(new_user)
                 database.session.commit()
-                flash(f'Thanks for registering, {new_user.email}!')
+                flash(f'Thanks for registering, {new_user.email}! Please check your email to confirm your email address.', 'success')
                 current_app.logger.info(f'Registered new user: {form.email.data}!')
 
                 @copy_current_request_context
@@ -48,9 +65,7 @@ def register():
                         mail.send(message)
 
                 # Send an email confirming the new registration
-                msg = Message(subject='Registration - Flask Stock Portfolio App',
-                              body='Thanks for registering with the Flask Stock Portfolio App!',
-                              recipients=[form.email.data])
+                msg = generate_confirmation_email(form.email.data)
                 email_thread = Thread(target=send_email, args=[msg])
                 email_thread.start()
 
@@ -62,6 +77,33 @@ def register():
             flash(f"Error in form data!")
 
     return render_template('users/register.html', form=form)
+
+
+@users_blueprint.route('/confirm/<token>')
+def confirm_email(token):
+    try:
+        confirm_serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        email = confirm_serializer.loads(token, salt='email-confirmation-salt', max_age=3600)
+    except BadSignature:
+        flash('The confirmation link is invalid or has expired.', 'error')
+        current_app.logger.info(f'Invalid or expired confirmation link received from IP address: {request.remote_addr}')
+        return redirect(url_for('users.login'))
+
+    query = database.select(User).where(User.email == email)
+    user = database.session.execute(query).scalar_one()
+
+    if user.email_confirmed:
+        flash('Account already confirmed. Please login.', 'info')
+        current_app.logger.info(f'Confirmation link received for a confirmed user: {user.email}')
+    else:
+        user.email_confirmed = True
+        user.email_confirmed_on = datetime.now()
+        database.session.add(user)
+        database.session.commit()
+        flash('Thank you for confirming your email address!', 'success')
+        current_app.logger.info(f'Email address confirmed for: {user.email}')
+
+    return redirect(url_for('stocks.index'))
 
 
 @users_blueprint.route('/login', methods=['GET', 'POST'])
@@ -116,3 +158,74 @@ def logout():
 @login_required
 def user_profile():
     return render_template('users/profile.html')
+
+
+def generate_password_reset_email(user_email):
+    password_reset_serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+
+    password_reset_url = url_for('users.process_password_reset_token',
+                                token=password_reset_serializer.dumps(user_email, salt='password-reset-salt'),
+                                _external=True)
+
+    return Message(subject='Flask Stock Portfolio App - Password Reset Requested',
+                   html=render_template('users/email_password_reset.html', password_reset_url=password_reset_url),
+                   recipients=[user_email])
+
+
+@users_blueprint.route('/password_reset_via_email', methods=['GET', 'POST'])
+def password_reset_via_email():
+    form = EmailForm()
+
+    if form.validate_on_submit():
+        query = database.select(User).where(User.email == form.email.data)
+        user = database.session.execute(query).scalar()
+
+        if user is None:
+            flash('Error! Invalid email address!', 'error')
+            return render_template('users/password_reset_via_email.html', form=form)
+
+        if user.email_confirmed:
+            @copy_current_request_context
+            def send_email(email_message):
+                with current_app.app_context():
+                    mail.send(email_message)
+
+            # Send an email confirming the new registration
+            message = generate_password_reset_email(form.email.data)
+            email_thread = Thread(target=send_email, args=[message])
+            email_thread.start()
+
+            flash('Please check your email for a password reset link.', 'success')
+        else:
+            flash('Your email address must be confirmed before attempting a password reset.', 'error')
+        return redirect(url_for('users.login'))
+
+    return render_template('users/password_reset_via_email.html', form=form)
+
+
+@users_blueprint.route('/password_reset_via_token/<token>', methods=['GET', 'POST'])
+def process_password_reset_token(token):
+    try:
+        password_reset_serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        email = password_reset_serializer.loads(token, salt='password-reset-salt', max_age=3600)
+    except BadSignature:
+        flash('The password reset link is invalid or has expired.', 'error')
+        return redirect(url_for('users.login'))
+
+    form = PasswordForm()
+
+    if form.validate_on_submit():
+        query = database.select(User).where(User.email == email)
+        user = database.session.execute(query).scalar()
+
+        if user is None:
+            flash('Invalid email address!', 'error')
+            return redirect(url_for('users.login'))
+
+        user.set_password(form.password.data)
+        database.session.add(user)
+        database.session.commit()
+        flash('Your password has been updated!', 'success')
+        return redirect(url_for('users.login'))
+
+    return render_template('users/reset_password_with_token.html', form=form)
