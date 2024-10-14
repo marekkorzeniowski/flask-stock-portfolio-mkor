@@ -98,3 +98,5 @@ def afterwards_reset_default_user_password():
     user.set_password('FlaskIsAwesome123')
     database.session.add(user)
     database.session.commit()
+
+

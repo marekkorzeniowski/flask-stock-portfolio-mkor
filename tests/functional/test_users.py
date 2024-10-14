@@ -186,6 +186,13 @@ def test_user_profile_logged_in(test_client, log_in_default_user):
     assert b'Flask Stock Portfolio App' in response.data
     assert b'User Profile' in response.data
     assert b'Email: patrick@gmail.com' in response.data
+    assert b'Account Statistics' in response.data
+    assert b'Joined on' in response.data
+    assert b'Email address has not been confirmed!' in response.data
+    assert b'Email address confirmed on' not in response.data
+    assert b'Account Actions' in response.data
+    assert b'Change Password' in response.data
+    assert b'Resend Email Confirmation' in response.data
 
 
 def test_user_profile_not_logged_in(test_client):
@@ -450,3 +457,130 @@ def test_post_password_reset_invalid_token(test_client):
     assert response.status_code == 200
     assert b'Your password has been updated!' not in response.data
     assert b'The password reset link is invalid or has expired.' in response.data
+
+
+def test_user_profile_logged_in_email_confirmed(test_client, confirm_email_default_user):
+    """
+    GIVEN a Flask application configured for testing and the default user logged in
+          and their email address is confirmed
+    WHEN the '/users/profile' page is requested (GET)
+    THEN check that profile for the current user is presented
+    """
+    response = test_client.get('/users/profile')
+    assert response.status_code == 200
+    assert b'Flask Stock Portfolio App' in response.data
+    assert b'User Profile' in response.data
+    assert b'Email: patrick@gmail.com' in response.data
+    assert b'Account Statistics' in response.data
+    assert b'Joined on' in response.data
+    assert b'Email address has not been confirmed!' not in response.data
+    assert b'Email address confirmed on Wednesday, July 08, 2020' in response.data
+    assert b'Account Actions' in response.data
+    assert b'Change Password' in response.data
+    assert b'Resend Email Confirmation' not in response.data
+
+
+def test_get_change_password_logged_in(test_client, log_in_default_user):
+    """
+    GIVEN a Flask application configured for testing with the user logged in
+    WHEN the '/users/change_password' page is retrieved (GET)
+    THEN check that the page is retrieved successfully
+    """
+    response = test_client.get('/users/change_password', follow_redirects=True)
+    assert response.status_code == 200
+    assert b'Change Password' in response.data
+    assert b'Current Password' in response.data
+    assert b'New Password' in response.data
+
+
+def test_get_change_password_not_logged_in(test_client):
+    """
+    GIVEN a Flask application configured for testing with the user NOT logged in
+    WHEN the '/users/change_password' page is retrieved (GET)
+    THEN check an error message is returned to the user
+    """
+    response = test_client.get('/users/change_password', follow_redirects=True)
+    assert response.status_code == 200
+    assert b'Please log in to access this page.' in response.data
+    assert b'Change Password' not in response.data
+
+
+def test_post_change_password_logged_in_valid_current_password(test_client, log_in_default_user, afterwards_reset_default_user_password):
+    """
+    GIVEN a Flask application configured for testing with the user logged in
+    WHEN the '/users/change_password' page is posted to (POST) with the correct current password
+    THEN check that the user's password is updated correctly
+    """
+    response = test_client.post('/users/change_password',
+                                data={'current_password': 'FlaskIsAwesome123',
+                                      'new_password': 'FlaskIsStillAwesome456'},
+                                follow_redirects=True)
+    assert response.status_code == 200
+    assert b'Password has been updated!' in response.data
+    query = database.select(User).where(User.email == 'patrick@gmail.com')
+    user = database.session.execute(query).scalar_one()
+    assert not user.is_password_correct('FlaskIsAwesome123')
+    assert user.is_password_correct('FlaskIsStillAwesome456')
+
+
+def test_post_change_password_logged_in_invalid_current_password(test_client, log_in_default_user):
+    """
+    GIVEN a Flask application configured for testing with the user logged in
+    WHEN the '/users/change_password' page is posted to (POST) with the incorrect current password
+    THEN check an error message is returned to the user
+    """
+    response = test_client.post('/users/change_password',
+                                data={'current_password': 'FlaskIsNotAwesome123',
+                                      'new_password': 'FlaskIsStillAwesome456'},
+                                follow_redirects=True)
+    assert response.status_code == 200
+    assert b'Password has been updated!' not in response.data
+    assert b'ERROR! Incorrect user credentials!' in response.data
+
+
+def test_post_change_password_not_logged_in(test_client):
+    """
+    GIVEN a Flask application configured for testing with the user not logged in
+    WHEN the '/users/change_password' page is posted to (POST)
+    THEN check an error message is returned to the user
+    """
+    response = test_client.post('/users/change_password',
+                                data={'current_password': 'FlaskIsAwesome123',
+                                      'new_password': 'FlaskIsStillAwesome456'},
+                                follow_redirects=True)
+    assert response.status_code == 200
+    assert b'Please log in to access this page.' in response.data
+    assert b'Password has been updated!' not in response.data
+
+
+def test_get_resend_email_confirmation_logged_in(test_client, log_in_default_user):
+    """
+    GIVEN a Flask application configured for testing with the user logged in
+    WHEN the '/users/resend_email_confirmation' page is retrieved (GET)
+    THEN check that an email was queued up to send
+    """
+    with mail.record_messages() as outbox:
+        response = test_client.get('/users/resend_email_confirmation', follow_redirects=True)
+        assert response.status_code == 200
+        assert b'Email sent to confirm your email address. Please check your email!' in response.data
+        assert len(outbox) == 1
+        assert outbox[0].subject == 'Flask Stock Portfolio App - Confirm Your Email Address'
+        assert outbox[0].sender == 'flaskstockportfolioapp@gmail.com'
+        assert outbox[0].recipients[0] == 'patrick@gmail.com'
+        assert 'http://localhost/users/confirm/' in outbox[0].html
+
+
+def test_get_resend_email_confirmation_not_logged_in(test_client):
+    """
+    GIVEN a Flask application configured for testing with the user not logged in
+    WHEN the '/users/resend_email_confirmation' page is retrieved (GET)
+    THEN check that an email was not queued up to send
+    """
+    with mail.record_messages() as outbox:
+        response = test_client.get('/users/resend_email_confirmation', follow_redirects=True)
+        assert response.status_code == 200
+        assert b'Email sent to confirm your email address. Please check your email!' not in response.data
+        assert len(outbox) == 0
+        assert b'Please log in to access this page.' in response.data
+
+
