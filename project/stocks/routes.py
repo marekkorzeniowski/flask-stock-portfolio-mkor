@@ -1,3 +1,7 @@
+from datetime import datetime
+
+from flask_login import login_required, current_user
+
 from . import stocks_blueprint
 from flask import current_app, render_template, request, session, flash, redirect, url_for
 from pydantic import BaseModel, field_validator, ValidationError
@@ -26,6 +30,7 @@ def index():
 
 
 @stocks_blueprint.route('/add_stock', methods=['GET', 'POST'])
+@login_required
 def add_stock():
     if request.method == 'POST':
         try:
@@ -36,31 +41,28 @@ def add_stock():
             )
             print(stock_data)
 
-            # Save the form data to the session object
-            session['stock_symbol'] = stock_data.stock_symbol
-            session['number_of_shares'] = stock_data.number_of_shares
-            session['purchase_price'] = stock_data.purchase_price
-
             # Save the form data to the database
             new_stock = Stock(stock_data.stock_symbol,
                               stock_data.number_of_shares,
-                              stock_data.purchase_price)
+                              stock_data.purchase_price,
+                              current_user.id,
+                              datetime.fromisoformat(request.form['purchase_date']))
             database.session.add(new_stock)
             database.session.commit()
 
             flash(f"Added new stock ({stock_data.stock_symbol})!", 'success')
             current_app.logger.info(f"Added new stock ({request.form['stock_symbol']})!")
-
-            return redirect(url_for('stocks.list_stocks'))  # PREVIOUS: url_for('list_stocks')
+            return redirect(url_for('stocks.list_stocks'))
         except ValidationError as e:
             print(e)
 
-    return render_template('stocks/add_stock.html')  # PREVIOUS: return render_template('add_stock.html')
+    return render_template('stocks/add_stock.html')
 
 
 @stocks_blueprint.route('/stocks/')
+@login_required
 def list_stocks():
-    query = database.select(Stock).order_by(Stock.id)
+    query = database.select(Stock).where(Stock.user_id == current_user.id).order_by(Stock.id)
     stocks = database.session.execute(query).scalars().all()
     return render_template('stocks/stocks.html', stocks=stocks)
 
