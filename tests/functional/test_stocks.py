@@ -3,6 +3,8 @@ This file (test_stocks.py) contains the functional tests for the 'stocks' bluepr
 """
 import requests
 
+from tests.conftest import MockSuccessResponse, MockFailedResponse
+
 
 def test_index_page(test_client):
     """
@@ -59,7 +61,7 @@ def test_get_add_stock_page_not_logged_in(test_client):
     assert b'Please log in to access this page.' in response.data
 
 
-def test_post_add_stock_page(test_client, log_in_default_user):
+def test_post_add_stock_page(test_client, log_in_default_user, mock_requests_get_success_quote):
     """
     GIVEN a Flask application configured for testing and the user logged in
     WHEN the '/add_stock' page is posted to (POST)
@@ -100,7 +102,7 @@ def test_post_add_stock_page_not_logged_in(test_client):
     assert b'Please log in to access this page.' in response.data
 
 
-def test_get_stock_list_logged_in(test_client, add_stocks_for_default_user):
+def test_get_stock_list_logged_in(test_client, add_stocks_for_default_user, mock_requests_get_success_quote):
     """
     GIVEN a Flask application configured for testing, with the default user logged in
           and the default set of stocks in the database
@@ -131,4 +133,53 @@ def test_get_stock_list_not_logged_in(test_client):
     assert response.status_code == 200
     assert b'List of Stocks' not in response.data
     assert b'Please log in to access this page.' in response.data
+
+
+def test_monkeypatch_get_success(monkeypatch):
+    """
+    GIVEN a Flask application and a monkeypatched version of requests.get()
+    WHEN the HTTP response is set to successful
+    THEN check the HTTP response
+    """
+    def mock_get(url):
+        return MockSuccessResponse(url)
+
+    url = 'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=MSFT&apikey=demo'
+    monkeypatch.setattr(requests, 'get', mock_get)
+    r = requests.get(url)
+    assert r.status_code == 200
+    assert r.url == url
+    assert 'MSFT' in r.json()['Global Quote']['01. symbol']
+    assert '295.37' in r.json()['Global Quote']['05. price']
+    assert '2023-04-26' in r.json()['Global Quote']['07. latest trading day']
+
+
+def test_monkeypatch_get_failure(monkeypatch):
+    """
+    GIVEN a Flask application configured for testing and a monkeypatched version of requests.get()
+    WHEN the HTTP response is set to failed
+    THEN check the HTTP response
+    """
+    def mock_get(url):
+        return MockFailedResponse(url)
+
+    url = 'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=MSFT&apikey=demo'
+    monkeypatch.setattr(requests, 'get', mock_get)
+    r = requests.get(url)
+    print(r.json())
+    assert r.status_code == 404
+    assert r.url == url
+    assert 'bad' in r.json()['error']
+
+
+
+def test_get_stock_detail_page_invalid_stock(test_client, log_in_default_user):
+    """
+    GIVEN a Flask application configured for testing with the default user logged in
+    WHEN the '/stocks/234' page is retrieved (GET)
+    THEN check that a 404 error is returned
+    """
+    response = test_client.get('/stocks/234')
+    assert response.status_code == 404
+    assert b'Stock Details' not in response.data
 

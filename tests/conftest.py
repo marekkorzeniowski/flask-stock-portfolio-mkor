@@ -9,10 +9,19 @@ from project import create_app, database
 from project.models import Stock, User
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(scope='function')
 def new_stock():
-    stock = Stock('AAPL', '16', '406.78', 17, datetime(2020, 7, 18))
-    return stock
+    # Set the Testing configuration prior to creating the Flask application
+    os.environ['CONFIG_TYPE'] = 'config.TestingConfig'
+    flask_app = create_app()
+    flask_app.extensions['mail'].suppress = True
+
+    # Create a test client using the Flask application configured for testing
+    with flask_app.test_client() as testing_client:
+        # Establish an application context before accessing the logger and database
+        with flask_app.app_context():
+            stock = Stock('AAPL', '16', '406.78', 17, datetime(2020, 7, 18))
+            yield stock  # this is where the testing happens!
 
 
 @pytest.fixture(scope='module')
