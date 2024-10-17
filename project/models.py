@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import flask_login
 import requests
@@ -13,6 +13,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 def create_alpha_vantage_url_quote(symbol: str) -> str:
     return 'https://www.alphavantage.co/query?function={}&symbol={}&apikey={}'.format(
         'GLOBAL_QUOTE',
+        symbol,
+        current_app.config['ALPHA_VANTAGE_API_KEY']
+    )
+
+
+def create_alpha_vantage_get_url_weekly(symbol: str) -> str:
+    return 'https://www.alphavantage.co/query?function={}&symbol={}&apikey={}'.format(
+        'TIME_SERIES_WEEKLY_ADJUSTED',
         symbol,
         current_app.config['ALPHA_VANTAGE_API_KEY']
     )
@@ -86,6 +94,54 @@ class Stock(database.Model):
                 self.position_value = self.current_price * self.number_of_shares
                 current_app.logger.debug(f'Retrieved current price {self.current_price / 100} '
                                          f'for the stock data ({self.stock_symbol})!')
+
+    def get_weekly_stock_data(self):
+        title = 'Stock chart is unavailable.'
+        labels = []
+        values = []
+        url = create_alpha_vantage_get_url_weekly(self.stock_symbol)
+
+        try:
+            r = requests.get(url)
+        except requests.exceptions.ConnectionError:
+            current_app.logger.info(
+                f'Error! Network problem preventing retrieving the weekly stock data ({self.stock_symbol})!')
+
+        # Status code returned from Alpha Vantage needs to be 200 (OK) to process stock data
+        if r.status_code != 200:
+            current_app.logger.warning(f'Error! Received unexpected status code ({r.status_code}) '
+                                       f'when retrieving weekly stock data ({self.stock_symbol})!')
+            return title, '', ''
+
+        weekly_data = r.json()
+
+        # The key of 'Weekly Adjusted Time Series' needs to be present in order to process the stock data
+        # Typically, this key will not be present if the API rate limit has been exceeded.
+        if 'Weekly Adjusted Time Series' not in weekly_data:
+            current_app.logger.warning(f'Could not find the Weekly Adjusted Time Series key when retrieving '
+                                       f'the weekly stock data ({self.stock_symbol})!')
+            return title, '', ''
+
+        title = f'Weekly Prices ({self.stock_symbol})'
+
+        # Determine the start date as either:
+        #   - If the start date is less than 12 weeks ago, then use the date from 12 weeks ago
+        #   - Otherwise, use the purchase date
+        start_date = self.purchase_date
+        if (datetime.now() - self.purchase_date) < timedelta(weeks=12):
+            start_date = datetime.now() - timedelta(weeks=12)
+
+        for element in weekly_data['Weekly Adjusted Time Series']:
+            date = datetime.fromisoformat(element)
+            if date.date() > start_date.date():
+                labels.append(date)
+                values.append(weekly_data['Weekly Adjusted Time Series'][element]['4. close'])
+
+        # Reverse the elements as the data from Alpha Vantage is read in latest to oldest
+        labels.reverse()
+        values.reverse()
+
+        return title, labels, values
 
     def __repr__(self):
         return f'{self.stock_symbol} - {self.number_of_shares} shares purchased at ${self.purchase_price / 100}'

@@ -130,3 +130,22 @@ def chartjs_demo3():
     values = [10.3, 9.2, 8.7, 7.1, 6.0, 4.4, 7.6, 8.9]
     return render_template('stocks/chartjs_demo3.html',
                            values=values, labels=labels, title=title)
+
+
+from flask import render_template, request, redirect, url_for, flash, current_app, abort
+
+
+@stocks_blueprint.route('/stocks/<id>')
+@login_required
+def stock_details(id):
+    query = database.select(Stock).where(Stock.id == id)
+    stock = database.session.execute(query).scalar_one_or_none()
+
+    if stock is None:
+        abort(404)
+
+    if stock.user_id != current_user.id:
+        abort(403)
+
+    title, labels, values = stock.get_weekly_stock_data()
+    return render_template('stocks/stock_details.html', stock=stock, title=title, labels=labels, values=values)
