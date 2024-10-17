@@ -10,8 +10,12 @@ class Config(object):
     DEBUG = False
     TESTING = False
     SECRET_KEY = os.getenv('SECRET_KEY', default='BAD_SECRET_KEY')
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL',
-                                        default=f"sqlite:///{os.path.join(BASEDIR, 'instance', 'app.db')}")
+    # Since SQLAlchemy 1.4.x has removed support for the 'postgres://' URI scheme,
+    # update the URI to the postgres database to use the supported 'postgresql://' scheme
+    if os.getenv('DATABASE_URL'):
+        SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL').replace("postgres://", "postgresql://", 1)
+    else:
+        SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(BASEDIR, 'instance', 'app.db')}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     WTF_CSRF_ENABLED = True
     EMEMBER_COOKIE_DURATION = timedelta(days=14)
@@ -23,6 +27,8 @@ class Config(object):
     MAIL_USERNAME = os.getenv('MAIL_USERNAME', default='')
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', default='')
     MAIL_DEFAULT_SENDER = os.getenv('MAIL_USERNAME', default='')
+    # Logging
+    LOG_WITH_GUNICORN = os.getenv('LOG_WITH_GUNICORN', default=False)
 
     ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY', default='demo')
 
